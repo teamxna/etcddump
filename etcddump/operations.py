@@ -1,5 +1,6 @@
 from urlparse import urlparse
 import etcd
+import re
 import json
 import sys
 
@@ -12,8 +13,12 @@ class BaseOperations(object):
 
     def get_client(self, url, ca_cert=None, cert=None):
         parsed = urlparse(url)
-        (h, p) = parsed.netloc.split(':')
-        self.client = etcd.Client(host=h, port=int(p), protocol=parsed.scheme, allow_reconnect=False, ca_cert=ca_cert, cert=cert)
+        netloc_regex = re.compile(r"(?:([^:]+)(?::(.*))?@)?([^:]+)(?::([\d]+))?")
+	endpoint = url
+	scheme, netloc, path, params, query, fragment = urlparse(endpoint)
+	user, passwrd, h, p = netloc_regex.search(netloc).groups()
+        self.client = etcd.Client(host=h, port=int(p),username=user,password=passwrd, protocol=parsed.scheme, allow_reconnect=False, ca_cert=ca_cert, cert=cert)
+        print (self.client)
 
     def entry_from_result(self, entry):
         return {
@@ -65,9 +70,10 @@ class Restorer(BaseOperations):
         lastidx = 0
 
         for entry in data:
+            print(entry['key'].encode('utf-8'))
             if preserve_indexes:
                 self.fillin(entry['index'], lastidx)
-
+            
             r = self.write(entry)
             lastidx = r.modifiedIndex
 
@@ -78,4 +84,4 @@ class Restorer(BaseOperations):
         return idx
 
     def write(self, entry):
-	return self.client.write(entry['key'].encode('utf-8'), entry['value'].encode('utf-8'), ttl = entry['ttl'], dir = entry['dir'])        
+	return self.client.write(entry['key'].encode('utf-8'), entry['value'], ttl = entry['ttl'], dir = entry['dir'])        
